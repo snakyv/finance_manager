@@ -1,0 +1,66 @@
+{% extends "expenses/base.html" %}
+{% block title %}Доходи{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-semibold">Мої доходи</h1>
+</div>
+
+<div class="grid md:grid-cols-2 gap-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-3">Додати дохід</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="block text-sm mb-1">Сума</label>
+                {{ form.amount }}
+                {{ form.amount.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm mb-1">Категорія</label>
+                {{ form.category }}
+                {{ form.category.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm mb-1">Опис</label>
+                {{ form.description }}
+                {{ form.description.errors }}
+            </div>
+            <button type="submit"
+                    class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700">
+                Зберегти
+            </button>
+        </form>
+    </div>
+
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-3">Історія доходів</h2>
+        <table class="min-w-full text-sm">
+            <thead class="bg-slate-100">
+            <tr>
+                <th class="px-3 py-2 text-left">Дата</th>
+                <th class="px-3 py-2 text-left">Категорія</th>
+                <th class="px-3 py-2 text-left">Сума</th>
+                <th class="px-3 py-2 text-left">Опис</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for i in incomes %}
+                <tr class="border-t">
+                    <td class="px-3 py-2">{{ i.created_at|date:"Y-m-d" }}</td>
+                    <td class="px-3 py-2">{{ i.get_category_display }}</td>
+                    <td class="px-3 py-2">{{ i.amount|floatformat:2 }} грн</td>
+                    <td class="px-3 py-2">{{ i.description }}</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" class="px-3 py-3 text-center text-slate-500">
+                        Ще немає доходів.
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

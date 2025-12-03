@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Finance Manager{% endblock %}</title>
+
+    <!-- Tailwind через CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-slate-100">
+
+<nav class="bg-slate-800 text-white px-6 py-3 flex justify-between items-center">
+    <a href="{% url 'dashboard' %}" class="font-semibold text-lg">Finance Manager</a>
+    <div class="flex items-center gap-4">
+        {% if user.is_authenticated %}
+            <span class="text-sm">Привіт, {{ user.username }}!</span>
+            <a href="{% url 'expense_list' %}" class="text-sm hover:underline">Витрати</a>
+            <a href="{% url 'income_list' %}" class="text-sm hover:underline">Доходи</a>
+            <a href="{% url 'budget_list' %}" class="text-sm hover:underline">Бюджети</a>
+            <a href="{% url 'emotional_report' %}" class="text-sm hover:underline">Емоційні витрати</a>
+
+            <!-- Logout через POST -->
+            <form method="post" action="{% url 'logout' %}" class="inline">
+                {% csrf_token %}
+                <button type="submit"
+                        class="text-sm bg-slate-700 px-3 py-1 rounded hover:bg-slate-600">
+                    Вийти
+                </button>
+            </form>
+        {% else %}
+            <a href="{% url 'login' %}" class="text-sm hover:underline">Увійти</a>
+            <a href="{% url 'signup' %}" class="text-sm hover:underline">Реєстрація</a>
+        {% endif %}
+    </div>
+</nav>
+
+<main class="container mx-auto px-4 py-6">
+    {% if messages %}
+        <div class="mb-4">
+            {% for message in messages %}
+                <div class="bg-blue-100 border border-blue-300 text-blue-800 px-4 py-2 rounded mb-2">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>

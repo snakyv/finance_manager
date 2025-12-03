@@ -1,0 +1,152 @@
+{% extends "expenses/base.html" %}
+{% block title %}Дашборд{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Огляд фінансів</h1>
+
+<div class="grid md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Всього витрат за місяць</h2>
+        <p class="text-2xl font-bold mt-2">{{ total_expenses|floatformat:2 }} грн</p>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Доходи за місяць</h2>
+        <p class="text-2xl font-bold mt-2 text-green-600">{{ total_incomes|floatformat:2 }} грн</p>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Баланс</h2>
+        <p class="text-2xl font-bold mt-2 {% if balance < 0 %}text-red-600{% else %}text-green-600{% endif %}">
+            {{ balance|floatformat:2 }} грн
+        </p>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Емоційні витрати</h2>
+        <p class="text-2xl font-bold mt-2">{{ emotional_total|floatformat:2 }} грн</p>
+        <p class="text-xs text-slate-500 mt-1">
+            Частка: {{ emotional_percent|floatformat:1 }}%
+        </p>
+    </div>
+</div>
+
+{% if budget_stats %}
+<div class="bg-white shadow rounded p-4 mb-6">
+    <h2 class="font-semibold mb-3">Бюджети за категоріями</h2>
+    <div class="space-y-3">
+        {% for b in budget_stats %}
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span>{{ b.category_name }}</span>
+                    <span>
+                        {{ b.spent|floatformat:2 }} / {{ b.limit|floatformat:2 }} грн
+                        ({{ b.percent|floatformat:1 }}%)
+                    </span>
+                </div>
+                <div class="w-full h-2 rounded bg-slate-200 overflow-hidden">
+                    {% with b.percent|floatformat:0 as width %}
+                        <div class="h-2 rounded js-budget-bar
+                                    {% if b.percent > 100 %}bg-red-500
+                                    {% elif b.percent > 90 %}bg-orange-400
+                                    {% else %}bg-green-500{% endif %}"
+                             data-width="{{ width }}">
+                        </div>
+                    {% endwith %}
+                </div>
+                {% if b.percent > 90 %}
+                    <p class="text-xs text-red-600 mt-1">
+                        Увага: ви майже вичерпали бюджет для цієї категорії.
+                    </p>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid md:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-2">Розподіл витрат за категоріями</h2>
+        <canvas id="categoryChart" height="200"></canvas>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-2">Динаміка витрат (30 днів)</h2>
+        <canvas id="dailyChart" height="200"></canvas>
+    </div>
+</div>
+
+<div class="bg-white shadow rounded p-4">
+    <h2 class="font-semibold mb-2">Грошовий потік (доходи vs витрати, 30 днів)</h2>
+    <canvas id="cashFlowChart" height="200"></canvas>
+</div>
+
+<script>
+    // Данні для графіків
+    const catLabels = JSON.parse('{{ cat_labels_json|escapejs }}');
+    const catValues = JSON.parse('{{ cat_values_json|escapejs }}');
+    const dayLabels = JSON.parse('{{ day_labels_json|escapejs }}');
+    const dayValues = JSON.parse('{{ day_values_json|escapejs }}');
+
+    const cfLabels = JSON.parse('{{ cashflow_labels_json|escapejs }}');
+    const cfIncomes = JSON.parse('{{ cashflow_incomes_json|escapejs }}');
+    const cfExpenses = JSON.parse('{{ cashflow_expenses_json|escapejs }}');
+
+    // Pie chart по категоріям
+    new Chart(
+        document.getElementById('categoryChart'),
+        {
+            type: 'pie',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    data: catValues
+                }]
+            }
+        }
+    );
+
+    // Line chart по дням (витрати)
+    new Chart(
+        document.getElementById('dailyChart'),
+        {
+            type: 'line',
+            data: {
+                labels: dayLabels,
+                datasets: [{
+                    label: 'Сума витрат',
+                    data: dayValues,
+                    tension: 0.3
+                }]
+            }
+        }
+    );
+
+    // Cash-flow chart
+    new Chart(
+        document.getElementById('cashFlowChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: cfLabels,
+                datasets: [
+                    {
+                        label: 'Доходи',
+                        data: cfIncomes
+                    },
+                    {
+                        label: 'Витрати',
+                        data: cfExpenses
+                    }
+                ]
+            }
+        }
+    );
+
+    // Проставляем ширину бюджетних барів з data-width (0–100)
+    document.querySelectorAll('.js-budget-bar').forEach(el => {
+        const raw = el.getAttribute('data-width') || '0';
+        const value = parseFloat(raw);
+        const clamped = Math.max(0, Math.min(100, isNaN(value) ? 0 : value));
+        el.style.width = clamped + '%';
+        el.style.maxWidth = '100%';
+    });
+</script>
+{% endblock %}

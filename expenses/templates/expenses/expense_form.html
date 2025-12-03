@@ -1,0 +1,8 @@
+{% extends "expenses/base.html" %}
+{% block title %}Нова витрата{% endblock %}
+{% block content %}
+<div class="max-w-lg mx-auto bg-white shadow rounded p-4">
+    <h1 class="text-xl font-semibold mb-4">Нова витрата</h1>
+    {% include "expenses/partials/_expense_form.html" %}
+</div>
+{% endblock %}

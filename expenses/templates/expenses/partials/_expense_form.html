@@ -1,0 +1,25 @@
+<form method="post"
+      hx-post="{% url 'expense_create' %}"
+      hx-target="#expense-table"
+      hx-swap="innerHTML">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="block text-sm mb-1">Сума</label>
+        {{ form.amount }}
+        {{ form.amount.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="block text-sm mb-1">Опис</label>
+        {{ form.description }}
+        {{ form.description.errors }}
+    </div>
+    <div class="mb-3">
+        <label class="block text-sm mb-1">Коментар (необовʼязково)</label>
+        {{ form.notes }}
+        {{ form.notes.errors }}
+    </div>
+    <button type="submit"
+            class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700">
+        Зберегти
+    </button>
+</form>

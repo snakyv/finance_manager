@@ -1,0 +1,111 @@
+{% extends "expenses/base.html" %}
+{% block title %}Емоційні витрати{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Аналіз емоційних витрат</h1>
+
+<div class="grid md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Загальні витрати за місяць</h2>
+        <p class="text-2xl font-bold mt-2">{{ total|floatformat:2 }} грн</p>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Емоційні витрати</h2>
+        <p class="text-2xl font-bold mt-2 text-red-600">{{ emotional_total|floatformat:2 }} грн</p>
+        <p class="text-xs text-slate-500 mt-1">
+            Частка: {{ emotional_percent|floatformat:1 }}% від усіх витрат
+        </p>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="text-sm text-slate-500">Найчастіший тип емоційних витрат</h2>
+        <p class="text-xl font-bold mt-2">
+            {% if top_tag_name %}
+                {{ top_tag_name }}
+            {% else %}
+                Немає даних
+            {% endif %}
+        </p>
+        <p class="text-xs text-slate-500 mt-1">
+            Зверніть увагу на цей тип витрат, щоб краще контролювати імпульсивні покупки.
+        </p>
+    </div>
+</div>
+
+<div class="grid md:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-2">Структура емоційних витрат за типами</h2>
+        <canvas id="tagChart" height="200"></canvas>
+    </div>
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-2">Емоційні vs звичайні витрати за днями</h2>
+        <canvas id="emoDailyChart" height="200"></canvas>
+    </div>
+</div>
+
+<div class="bg-white shadow rounded p-4">
+    <h2 class="font-semibold mb-3">ТОП-5 днів з найбільшими емоційними витратами</h2>
+    <table class="min-w-full text-sm">
+        <thead class="bg-slate-100">
+        <tr>
+            <th class="px-3 py-2 text-left">Дата</th>
+            <th class="px-3 py-2 text-left">Сума емоційних витрат</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for d in top_days %}
+            <tr class="border-t">
+                <td class="px-3 py-2">{{ d.day }}</td>
+                <td class="px-3 py-2 text-red-600">{{ d.amount|floatformat:2 }} грн</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="2" class="px-3 py-3 text-center text-slate-500">
+                    Немає достатньо даних.
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const tagLabels = JSON.parse('{{ tag_labels_json|escapejs }}');
+    const tagValues = JSON.parse('{{ tag_values_json|escapejs }}');
+    const emoDays = JSON.parse('{{ emo_days_labels_json|escapejs }}');
+    const emoValues = JSON.parse('{{ emo_values_json|escapejs }}');
+    const normalValues = JSON.parse('{{ normal_values_json|escapejs }}');
+
+    new Chart(
+        document.getElementById('tagChart'),
+        {
+            type: 'pie',
+            data: {
+                labels: tagLabels,
+                datasets: [{
+                    data: tagValues
+                }]
+            }
+        }
+    );
+
+    new Chart(
+        document.getElementById('emoDailyChart'),
+        {
+            type: 'bar',
+            data: {
+                labels: emoDays,
+                datasets: [
+                    {
+                        label: 'Емоційні',
+                        data: emoValues
+                    },
+                    {
+                        label: 'Звичайні',
+                        data: normalValues
+                    }
+                ]
+            }
+        }
+    );
+</script>
+{% endblock %}

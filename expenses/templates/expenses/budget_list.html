@@ -1,0 +1,58 @@
+{% extends "expenses/base.html" %}
+{% block title %}Бюджети{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-semibold mb-4">Місячні бюджети</h1>
+
+<div class="grid md:grid-cols-2 gap-6">
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-3">Налаштувати бюджет</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="block text-sm mb-1">Категорія</label>
+                {{ form.category }}
+                {{ form.category.errors }}
+            </div>
+            <div class="mb-3">
+                <label class="block text-sm mb-1">Місячний ліміт, грн</label>
+                {{ form.monthly_limit }}
+                {{ form.monthly_limit.errors }}
+            </div>
+            <button type="submit"
+                    class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700">
+                Зберегти бюджет
+            </button>
+        </form>
+        <p class="text-xs text-slate-500 mt-3">
+            Якщо для обраної категорії бюджет уже існує, він буде оновлений.
+        </p>
+    </div>
+
+    <div class="bg-white shadow rounded p-4">
+        <h2 class="font-semibold mb-3">Поточні бюджети</h2>
+        <table class="min-w-full text-sm">
+            <thead class="bg-slate-100">
+            <tr>
+                <th class="px-3 py-2 text-left">Категорія</th>
+                <th class="px-3 py-2 text-left">Місячний ліміт</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for b in budgets %}
+                <tr class="border-t">
+                    <td class="px-3 py-2">{{ b.get_category_display }}</td>
+                    <td class="px-3 py-2">{{ b.monthly_limit|floatformat:2 }} грн</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="2" class="px-3 py-3 text-center text-slate-500">
+                        Ви ще не налаштували жодного бюджету.
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
