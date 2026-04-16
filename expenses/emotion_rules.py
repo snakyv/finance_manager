@@ -1,30 +1,32 @@
 from datetime import time
-from .models import Expense
 
 
 FAST_FOOD_KEYWORDS = [
-    'mcdonald', 'kfc', 'burger', 'pizza', 'subway',
-    'донер', 'шаурма', 'фастфуд', 'кава', 'coffee', 'starbucks'
+    'mcdonald', 'mcdonalds', 'kfc', 'burger', 'pizza', 'subway',
+    'донер', 'шаурма', 'фастфуд', 'кава', 'coffee', 'starbucks',
+    'latte', 'капучино', 'espresso', 'sushi', 'roll', 'макдональдс'
 ]
 
 ONLINE_SHOPPING_KEYWORDS = [
     'aliexpress', 'amazon', 'ebay', 'rozetka', 'ozon',
-    'steam', 'playstation', 'xbox', 'g2a'
+    'steam', 'playstation', 'xbox', 'g2a', 'makeup', 'sinsey',
+    'shopping', 'замовлення', 'покупка онлайн'
 ]
 
 ENTERTAINMENT_KEYWORDS = [
     'cinema', 'movie', 'netflix', 'spotify', 'concert',
-    'pub', 'bar', 'club'
+    'pub', 'bar', 'club', 'кіно', 'караоке', 'вечірка'
 ]
 
 
 def _contains_any(text: str, keywords: list[str]) -> bool:
-    text = text.lower()
+    text = (text or '').lower()
     return any(k in text for k in keywords)
 
 
 def analyze_emotional_expense(description: str, category: str, dt) -> tuple[bool, str]:
-    desc = description.lower()
+    desc = (description or '').lower()
+    category = (category or 'other').lower()
 
     if _contains_any(desc, FAST_FOOD_KEYWORDS):
         return True, 'fast_food'

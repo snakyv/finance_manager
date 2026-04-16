@@ -1,18 +1,29 @@
-from datetime import timedelta
+import csv
 import json
 import logging
+from datetime import timedelta
 
+from django.contrib import messages
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.db.models import Sum
+from django.db.models.functions import TruncDate
+from django.http import HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
-from .forms import ExpenseForm, SignUpForm, IncomeForm, CategoryBudgetForm
-from .models import Expense, Income, CategoryBudget, CategoryFeedback
-from .ml.expense_classifier import predict_category
 from .emotion_rules import analyze_emotional_expense
+from .forms import (
+    ExpenseForm,
+    SignUpForm,
+    IncomeForm,
+    CategoryBudgetForm,
+    TransactionImportForm,
+)
+from .models import Expense, Income, CategoryBudget, CategoryFeedback
+from .services.bank_io import import_transactions, safe_predict_expense_category
+from .services.emotional_advice import build_emotional_advice
 
 logger = logging.getLogger(__name__)
 
@@ -40,34 +51,36 @@ def signup_view(request):
 @login_required
 def dashboard(request):
     user = request.user
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = today.replace(day=1)
 
     expenses_qs = Expense.objects.filter(user=user, created_at__date__gte=month_start)
     incomes_qs = Income.objects.filter(user=user, created_at__date__gte=month_start)
+    today_expenses = Expense.objects.filter(user=user, created_at__date=today)
 
     total_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or 0
     total_incomes = incomes_qs.aggregate(total=Sum('amount'))['total'] or 0
     balance = total_incomes - total_expenses
 
-    by_category = expenses_qs.values('category').annotate(total=Sum('amount'))
-    cat_labels = []
-    cat_values = []
-    for item in by_category:
-        cat_labels.append(dict(Expense.CATEGORY_CHOICES)[item['category']])
-        cat_values.append(float(item['total']))
+    by_category = list(expenses_qs.values('category').annotate(total=Sum('amount')).order_by('-total'))
+    cat_labels = [dict(Expense.CATEGORY_CHOICES)[item['category']] for item in by_category]
+    cat_values = [float(item['total']) for item in by_category]
+    category_breakdown = [
+        {
+            'name': dict(Expense.CATEGORY_CHOICES)[item['category']],
+            'total': float(item['total']),
+        }
+        for item in by_category
+    ]
 
     emotional_total = expenses_qs.filter(is_emotional=True).aggregate(total=Sum('amount'))['total'] or 0
-    if total_expenses > 0:
-        emotional_percent = float(emotional_total) / float(total_expenses) * 100
-    else:
-        emotional_percent = 0.0
+    emotional_percent = float(emotional_total) / float(total_expenses) * 100 if total_expenses else 0.0
 
     date_from = today - timedelta(days=30)
     expenses_30 = Expense.objects.filter(user=user, created_at__date__gte=date_from)
     by_day_exp = (
         expenses_30
-        .extra(select={'day': "date(created_at)"})
+        .annotate(day=TruncDate('created_at'))
         .values('day')
         .annotate(total=Sum('amount'))
         .order_by('day')
@@ -76,19 +89,16 @@ def dashboard(request):
     day_values = [float(item['total']) for item in by_day_exp]
 
     incomes_30 = Income.objects.filter(user=user, created_at__date__gte=date_from)
-    exp_by_day_dict = {}
-    for item in by_day_exp:
-        exp_by_day_dict[str(item['day'])] = float(item['total'])
-    inc_by_day_dict = {}
     by_day_inc = (
         incomes_30
-        .extra(select={'day': "date(created_at)"})
+        .annotate(day=TruncDate('created_at'))
         .values('day')
         .annotate(total=Sum('amount'))
         .order_by('day')
     )
-    for item in by_day_inc:
-        inc_by_day_dict[str(item['day'])] = float(item['total'])
+
+    exp_by_day_dict = {str(item['day']): float(item['total']) for item in by_day_exp}
+    inc_by_day_dict = {str(item['day']): float(item['total']) for item in by_day_inc}
 
     all_days = sorted(set(exp_by_day_dict.keys()) | set(inc_by_day_dict.keys()))
     cashflow_labels = all_days
@@ -97,16 +107,18 @@ def dashboard(request):
 
     budgets = CategoryBudget.objects.filter(user=user)
     budget_stats = []
-    for b in budgets:
-        spent = expenses_qs.filter(category=b.category).aggregate(total=Sum('amount'))['total'] or 0
-        percent = float(spent) / float(b.monthly_limit) * 100 if b.monthly_limit > 0 else 0
+    for budget in budgets:
+        spent = expenses_qs.filter(category=budget.category).aggregate(total=Sum('amount'))['total'] or 0
+        percent = float(spent) / float(budget.monthly_limit) * 100 if budget.monthly_limit > 0 else 0
         budget_stats.append({
-            'category_code': b.category,
-            'category_name': dict(Expense.CATEGORY_CHOICES)[b.category],
+            'category_code': budget.category,
+            'category_name': dict(Expense.CATEGORY_CHOICES)[budget.category],
             'spent': float(spent),
-            'limit': float(b.monthly_limit),
+            'limit': float(budget.monthly_limit),
             'percent': percent,
         })
+
+    advice_list = build_emotional_advice(list(today_expenses), list(expenses_qs.filter(is_emotional=True)))
 
     context = {
         'total_expenses': total_expenses,
@@ -114,17 +126,18 @@ def dashboard(request):
         'balance': balance,
         'emotional_total': emotional_total,
         'emotional_percent': emotional_percent,
+        'advice_list': advice_list,
 
         'cat_labels_json': json.dumps(cat_labels),
         'cat_values_json': json.dumps(cat_values),
         'day_labels_json': json.dumps(day_labels),
         'day_values_json': json.dumps(day_values),
-
         'cashflow_labels_json': json.dumps(cashflow_labels),
         'cashflow_incomes_json': json.dumps(cashflow_incomes),
         'cashflow_expenses_json': json.dumps(cashflow_expenses),
 
         'budget_stats': budget_stats,
+        'category_breakdown': category_breakdown,
     }
     return render(request, 'expenses/dashboard.html', context)
 
@@ -154,14 +167,14 @@ def expense_create(request):
     if request.method == 'POST':
         form = ExpenseForm(request.POST)
         if form.is_valid():
-            expense: Expense = form.save(commit=False)
+            expense = form.save(commit=False)
             expense.user = request.user
 
-            cat, conf = predict_category(expense.description)
+            cat, conf = safe_predict_expense_category(expense.description)
             valid_categories = {c[0] for c in Expense.CATEGORY_CHOICES}
 
             logger.info(
-                "ML predicted category=%s, conf=%.3f for user=%s",
+                'ML predicted category=%s, conf=%.3f for user=%s',
                 cat, conf, request.user.id
             )
 
@@ -178,23 +191,17 @@ def expense_create(request):
 
             expense.ml_confidence = conf
 
-            is_emotional, tag = analyze_emotional_expense(
-                expense.description,
-                expense.category,
-                timezone.now()
-            )
+            now_dt = timezone.now()
+            is_emotional, tag = analyze_emotional_expense(expense.description, expense.category, now_dt)
             expense.is_emotional = is_emotional
             expense.emotional_tag = tag
 
             expense.save()
+            messages.success(request, 'Витрату успішно додано.')
 
             if request.headers.get('HX-Request') == 'true':
                 qs = Expense.objects.filter(user=request.user)
-                return render(
-                    request,
-                    'expenses/partials/_expense_table.html',
-                    {'expenses': qs}
-                )
+                return render(request, 'expenses/partials/_expense_table.html', {'expenses': qs})
             return redirect('expense_list')
     else:
         form = ExpenseForm()
@@ -214,6 +221,10 @@ def expense_edit(request, pk):
         if form.is_valid():
             expense = form.save(commit=False)
             new_category = expense.category
+
+            is_emotional, tag = analyze_emotional_expense(expense.description, expense.category, expense.created_at)
+            expense.is_emotional = is_emotional
+            expense.emotional_tag = tag
             expense.save()
 
             if old_category != new_category:
@@ -225,6 +236,7 @@ def expense_edit(request, pk):
                     }
                 )
 
+            messages.success(request, 'Витрату оновлено.')
             return redirect('expense_list')
     else:
         form = ExpenseForm(instance=expense)
@@ -239,6 +251,7 @@ def expense_edit(request, pk):
 def expense_delete(request, pk):
     expense = get_object_or_404(Expense, pk=pk, user=request.user)
     expense.delete()
+    messages.success(request, 'Витрату видалено.')
     if request.headers.get('HX-Request') == 'true':
         qs = Expense.objects.filter(user=request.user)
         return render(request, 'expenses/partials/_expense_table.html', {'expenses': qs})
@@ -255,6 +268,7 @@ def income_list(request):
             income = form.save(commit=False)
             income.user = request.user
             income.save()
+            messages.success(request, 'Дохід успішно додано.')
             return redirect('income_list')
     else:
         form = IncomeForm()
@@ -283,6 +297,7 @@ def budget_list(request):
                 existing.save()
             else:
                 budget.save()
+            messages.success(request, 'Бюджет збережено.')
             return redirect('budget_list')
     else:
         form = CategoryBudgetForm()
@@ -294,9 +309,80 @@ def budget_list(request):
 
 
 @login_required
+def transaction_import(request):
+    if request.method == 'POST':
+        form = TransactionImportForm(request.POST, request.FILES)
+        if form.is_valid():
+            stats = import_transactions(
+                request.user,
+                form.cleaned_data['file'],
+                source_format=form.cleaned_data['source_format'],
+            )
+            if stats['created_expenses'] or stats['created_incomes']:
+                messages.success(
+                    request,
+                    f"Імпорт завершено: витрат {stats['created_expenses']}, доходів {stats['created_incomes']}, пропущено дублікатів {stats['skipped_duplicates']}."
+                )
+            else:
+                messages.warning(request, 'Імпорт не додав нових операцій. Можливо, всі записи вже існують.')
+            for err in stats['errors'][:3]:
+                messages.error(request, f'Помилка імпорту: {err}')
+            return redirect('transaction_import')
+    else:
+        form = TransactionImportForm()
+
+    return render(request, 'expenses/transaction_import.html', {'form': form})
+
+
+@login_required
+def transaction_export(request):
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    filename = timezone.localtime().strftime('finance_export_%Y%m%d_%H%M.csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow([
+        'type', 'date', 'amount', 'category', 'description',
+        'notes', 'is_emotional', 'emotional_tag', 'ml_confidence'
+    ])
+
+    expenses = Expense.objects.filter(user=request.user).order_by('-created_at')
+    incomes = Income.objects.filter(user=request.user).order_by('-created_at')
+
+    for expense in expenses:
+        writer.writerow([
+            'expense',
+            timezone.localtime(expense.created_at).strftime('%Y-%m-%d %H:%M:%S'),
+            expense.amount,
+            expense.category,
+            expense.description,
+            expense.notes,
+            'yes' if expense.is_emotional else 'no',
+            expense.emotional_tag,
+            expense.ml_confidence,
+        ])
+
+    for income in incomes:
+        writer.writerow([
+            'income',
+            timezone.localtime(income.created_at).strftime('%Y-%m-%d %H:%M:%S'),
+            income.amount,
+            income.category,
+            income.description,
+            '',
+            '',
+            '',
+            '',
+        ])
+
+    return response
+
+
+@login_required
 def emotional_report(request):
     user = request.user
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = today.replace(day=1)
 
     expenses_qs = Expense.objects.filter(user=user, created_at__date__gte=month_start)
@@ -304,12 +390,9 @@ def emotional_report(request):
 
     total = expenses_qs.aggregate(total=Sum('amount'))['total'] or 0
     emotional_total = emotional_qs.aggregate(total=Sum('amount'))['total'] or 0
-    if total > 0:
-        emotional_percent = float(emotional_total) / float(total) * 100
-    else:
-        emotional_percent = 0.0
+    emotional_percent = float(emotional_total) / float(total) * 100 if total else 0.0
 
-    by_tag = emotional_qs.values('emotional_tag').annotate(total=Sum('amount'))
+    by_tag = emotional_qs.values('emotional_tag').annotate(total=Sum('amount')).order_by('-total')
     tag_labels = []
     tag_values = []
     for item in by_tag:
@@ -318,10 +401,9 @@ def emotional_report(request):
         tag_labels.append(dict(Expense.EMOTIONAL_TAG_CHOICES)[item['emotional_tag']])
         tag_values.append(float(item['total']))
 
-    date_from = month_start
     exp_agg = (
         expenses_qs
-        .extra(select={'day': "date(created_at)"})
+        .annotate(day=TruncDate('created_at'))
         .values('day', 'is_emotional')
         .annotate(total=Sum('amount'))
         .order_by('day')
@@ -346,10 +428,11 @@ def emotional_report(request):
         reverse=True
     )[:5]
 
-    top_tag_name = None
-    if tag_labels:
-        max_idx = tag_values.index(max(tag_values))
-        top_tag_name = tag_labels[max_idx]
+    top_tag_name = tag_labels[0] if tag_labels else None
+    advice_list = build_emotional_advice(
+        list(Expense.objects.filter(user=user, created_at__date=today)),
+        list(emotional_qs),
+    )
 
     context = {
         'total': total,
@@ -365,5 +448,6 @@ def emotional_report(request):
 
         'top_days': top_days,
         'top_tag_name': top_tag_name,
+        'advice_list': advice_list,
     }
     return render(request, 'expenses/emotional_report.html', context)

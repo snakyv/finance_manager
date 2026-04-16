@@ -62,6 +62,26 @@ class CategoryBudgetForm(forms.ModelForm):
         }
 
 
+class TransactionImportForm(forms.Form):
+    SOURCE_FORMAT_CHOICES = [
+        ('auto', 'Автовизначення'),
+        ('monobank_like', 'Monobank-подібний CSV'),
+        ('privatbank_like', 'PrivatBank-подібний CSV'),
+        ('generic', 'Звичайний CSV'),
+    ]
+
+    file = forms.FileField(
+        label='CSV-файл',
+        help_text='Підтримуються CSV/TSV-файли з колонками дати, суми, опису та, за можливості, типу операції.',
+        widget=forms.ClearableFileInput(attrs={'accept': '.csv,.txt'})
+    )
+    source_format = forms.ChoiceField(
+        label='Формат імпорту',
+        choices=SOURCE_FORMAT_CHOICES,
+        initial='auto'
+    )
+
+
 class SignUpForm(UserCreationForm):
     email = forms.EmailField(required=True)
 

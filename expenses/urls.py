@@ -11,5 +11,9 @@ urlpatterns = [
 
     path('incomes/', views.income_list, name='income_list'),
     path('budgets/', views.budget_list, name='budget_list'),
+
+    path('transactions/import/', views.transaction_import, name='transaction_import'),
+    path('transactions/export/', views.transaction_export, name='transaction_export'),
+
     path('analytics/emotions/', views.emotional_report, name='emotional_report'),
 ]

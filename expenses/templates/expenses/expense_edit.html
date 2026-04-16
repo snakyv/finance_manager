@@ -2,38 +2,45 @@
 {% block title %}Редагувати витрату{% endblock %}
 
 {% block content %}
-<div class="max-w-lg mx-auto bg-white shadow rounded p-4">
-    <h1 class="text-xl font-semibold mb-4">Редагувати витрату</h1>
-    <p class="text-xs text-slate-500 mb-3">
+<div class="card" style="max-width: 720px; margin: 0 auto;">
+    <h1>Редагувати витрату</h1>
+
+    <p class="muted" style="margin-bottom: 16px;">
         Категорія була визначена ШІ з впевненістю {{ expense.ml_confidence|floatformat:2 }}.
-        Якщо вона некоректна – змініть її, і система врахує це під час подальшого навчання.
+        Якщо категорія некоректна, змініть її вручну — це буде враховано як зворотний зв’язок.
     </p>
-    <form method="post">
+
+    <form method="post" class="form-grid">
         {% csrf_token %}
-        <div class="mb-3">
-            <label class="block text-sm mb-1">Сума</label>
+
+        <div>
+            <label for="{{ form.amount.id_for_label }}">Сума</label>
             {{ form.amount }}
             {{ form.amount.errors }}
         </div>
-        <div class="mb-3">
-            <label class="block text-sm mb-1">Опис</label>
+
+        <div>
+            <label for="{{ form.description.id_for_label }}">Опис</label>
             {{ form.description }}
             {{ form.description.errors }}
         </div>
-        <div class="mb-3">
-            <label class="block text-sm mb-1">Категорія</label>
+
+        <div>
+            <label for="{{ form.category.id_for_label }}">Категорія</label>
             {{ form.category }}
             {{ form.category.errors }}
         </div>
-        <div class="mb-3">
-            <label class="block text-sm mb-1">Коментар</label>
+
+        <div>
+            <label for="{{ form.notes.id_for_label }}">Коментар</label>
             {{ form.notes }}
             {{ form.notes.errors }}
         </div>
-        <button type="submit"
-                class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700">
-            Зберегти
-        </button>
+
+        <div class="actions" style="margin-top: 4px;">
+            <button type="submit" class="btn">Зберегти</button>
+            <a href="{% url 'expense_list' %}" class="btn btn-light">Скасувати</a>
+        </div>
     </form>
 </div>
 {% endblock %}
